@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dohlik — 2D Artist · AI Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,400;1,700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0c121a;   /* глубокий холодный синий фон */
+  --bg2:       #101a26;   /* слой чуть светлее */
+  --bg3:       #152235;   /* ещё более заметный голубоватый слой */
+
+  --border:    rgba(180,210,255,0.10); /* мягкий голубой контур */
+
+  --text:      #e6f0ff;   /* светлый холодный бело-голубой текст */
+  --muted:     rgba(230,240,255,0.55); /* приглушённый текст */
+
+  --accent:    #6fa8ff;   /* нежный васильковый акцент */
+  --orange:    #7fb6d6;   /* заменён на холодный голубой (без тёплого диссонанса) */
+
+  --purple-glow: rgba(90,140,255,0.25); /* теперь голубое свечение */
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ── CURSOR ── */
+#cur { width:10px;height:10px;background:var(--accent);border-radius:50%;position:fixed;top:0;left:0;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);transition:transform .15s,background .3s; }
+#cur-ring { width:38px;height:38px;border:1px solid rgba(192,132,168,.4);border-radius:50%;position:fixed;top:0;left:0;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);transition:width .3s,height .3s,border-color .3s; }
+body:has(a:hover) #cur-ring,
+body:has(button:hover) #cur-ring { width:52px;height:52px;border-color:var(--accent); }
+
+/* ── HERO ── */
+.hero {
+  min-height: 100vh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 64px;
+  overflow: hidden;
+}
+
+/* Animated gradient orbs (blue cornflower palette) */
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+/* Top-right orb */
+.orb1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(
+    circle,
+    rgba(120, 180, 255, 0.45) 0%,
+    rgba(90, 150, 255, 0.25) 35%,
+    transparent 70%
+  );
+  top: -100px;
+  right: -100px;
+  animation: orbDrift1 18s ease-in-out infinite alternate;
+}
+
+/* Bottom-left orb */
+.orb2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(
+    circle,
+    rgba(140, 200, 255, 0.30) 0%,
+    rgba(80, 140, 220, 0.18) 40%,
+    transparent 70%
+  );
+  bottom: -80px;
+  left: 30%;
+  animation: orbDrift2 14s ease-in-out infinite alternate;
+}
+
+@keyframes orbDrift1 {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(-60px, 40px) scale(1.1); }
+  100% { transform: translate(30px, -30px) scale(0.95); }
+}
+
+@keyframes orbDrift2 {
+  0%   { transform: translate(0,0); }
+  100% { transform: translate(40px, -60px) scale(1.15); }
+}
+
+/* Scattered silhouette shapes (the dark bird/leaf shapes from the design) */
+.hero-shapes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.shape {
+  position: absolute;
+  background: rgba(0,0,0,.55);
+  border-radius: 50% 20% 50% 20%;
+  animation: shapeFloat linear infinite;
+}
+.shape:nth-child(1)  { width:22px;height:14px;top:12%;left:52%;animation-duration:22s;animation-delay:0s; }
+.shape:nth-child(2)  { width:16px;height:10px;top:18%;left:65%;animation-duration:18s;animation-delay:-4s; }
+.shape:nth-child(3)  { width:28px;height:16px;top:30%;left:70%;animation-duration:25s;animation-delay:-8s; }
+.shape:nth-child(4)  { width:12px;height:8px; top:45%;left:80%;animation-duration:20s;animation-delay:-2s; }
+.shape:nth-child(5)  { width:20px;height:12px;top:60%;left:58%;animation-duration:24s;animation-delay:-6s; }
+.shape:nth-child(6)  { width:18px;height:11px;top:25%;right:8%;animation-duration:19s;animation-delay:-10s; }
+.shape:nth-child(7)  { width:24px;height:14px;top:70%;right:12%;animation-duration:26s;animation-delay:-3s; }
+.shape:nth-child(8)  { width:14px;height:9px; top:55%;right:25%;animation-duration:21s;animation-delay:-7s; }
+@keyframes shapeFloat {
+  0%   { transform: translate(0,0) rotate(0deg); opacity:.6; }
+  25%  { transform: translate(12px,-18px) rotate(8deg); opacity:.8; }
+  50%  { transform: translate(-8px,-30px) rotate(-4deg); opacity:.5; }
+  75%  { transform: translate(6px,-48px) rotate(10deg); opacity:.7; }
+  100% { transform: translate(0,-70px) rotate(0deg); opacity:0; }
+}
+
+
+/* Theme image on the right */
+.hero-sphere {
+  position: absolute;
+  right: 50px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 560px;
+  height: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 0 80px rgba(100, 170, 255, 0.20),
+    0 0 0 1px rgba(180, 210, 255, 0.08);
+}
+
+.hero-sphere img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-sphere::before { display: none; }
+.hero-sphere::after  { display: none; }
+
+.hero-meta {
+  position: absolute;
+  top: 36px; left: 64px; right: 64px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--orange);
+  opacity: 0;
+  animation: fadeUp .8s ease forwards .2s;
+}
+.hero-meta-right { color: rgba(232,228,240,.4); }
+
+.hero-content { position: relative; z-index: 2; max-width: 700px; }
+
+.hero-name {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: clamp(72px, 9vw, 148px);
+  line-height: .9;
+  color: var(--accent);
+  letter-spacing: -.01em;
+  margin-bottom: 32px;
+  opacity: 0;
+  animation: fadeUp 1s cubic-bezier(.2,.8,.4,1) forwards .4s;
+}
+
+.hero-desc {
+  font-size: 18px;
+  line-height: 1.7;
+  color: rgba(232,228,240,.75);
+  max-width: 560px;
+  margin-bottom: 40px;
+  font-weight: 300;
+  opacity: 0;
+  animation: fadeUp .9s ease forwards .7s;
+}
+
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  opacity: 0;
+  animation: fadeUp .9s ease forwards .9s;
+}
+
+.tag {
+  padding: 8px 16px;
+  border: 1px solid rgba(255,255,255,.18);
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.65);
+  background: rgba(255,255,255,.03);
+  transition: border-color .3s, color .3s, background .3s;
+}
+.tag:hover { border-color: var(--accent); color: var(--accent); background: rgba(192,132,168,.06); }
+
+.scroll-hint {
+  position: absolute;
+  bottom: 40px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.3);
+  opacity: 0;
+  animation: fadeIn 1s ease forwards 1.4s;
+}
+.scroll-line {
+  width: 1px; height: 48px;
+  background: linear-gradient(to bottom, rgba(232,228,240,.3), transparent);
+  animation: scrollPulse 2s ease-in-out infinite 1.4s;
+}
+@keyframes scrollPulse {
+  0%,100% { transform: scaleY(1); opacity:.3; }
+  50%      { transform: scaleY(1.3); opacity:.7; }
+}
+
+/* ── SHARED SECTION STYLES ── */
+.section { padding: 100px 64px; }
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 32px;
+}
+.section-label::before { content:'—'; }
+
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: clamp(36px, 5vw, 72px);
+  line-height: 1.05;
+  margin-bottom: 56px;
+  color: var(--text);
+}
+.section-title em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+/* ── EXPERIENCE ── */
+.exp-section { background: var(--bg); }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--border);
+  margin-bottom: 64px;
+}
+.stat-box {
+  padding: 36px 32px;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+.stat-box:last-child { border-right: none; }
+.stat-num {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 42px;
+  font-weight: 400;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 8px;
+}
+.stat-lbl {
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.exp-item {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 48px;
+  padding: 40px 0;
+  border-top: 1px solid var(--border);
+}
+.exp-year {
+  font-size: 12px;
+  letter-spacing: .14em;
+  color: var(--orange);
+  text-transform: uppercase;
+  padding-top: 4px;
+}
+.exp-role {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 16px;
+  line-height: 1.3;
+}
+.exp-title {
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.4);
+  margin-bottom: 20px;
+}
+.exp-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.exp-list li {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  padding-left: 20px;
+  position: relative;
+}
+.exp-list li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: rgba(232,228,240,.25);
+}
+
+/* ── PIPELINE ── */
+.pipeline-section { background: var(--bg2); }
+
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border);
+}
+.pipeline-card {
+  padding: 48px 44px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  transition: background .4s;
+}
+.pipeline-card:nth-child(2n) { border-right: none; }
+.pipeline-card:nth-child(3), .pipeline-card:nth-child(4) { border-bottom: none; }
+.pipeline-card:hover { background: rgba(192,132,168,.04); }
+.pipeline-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 2px;
+  background: var(--accent);
+  width: 0;
+  transition: width .5s cubic-bezier(.77,0,.18,1);
+}
+.pipeline-card:hover::after { width: 100%; }
+
+.card-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 56px;
+  font-weight: 700;
+  color: rgba(255,255,255,.06);
+  line-height: 1;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.card-tools {
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.35);
+  margin-bottom: 20px;
+}
+.card-desc {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+/* ── SPECIAL PROJECT ── */
+.project-section { background: var(--bg); }
+
+.project-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 32px;
+  align-items: start;
+}
+
+/* Left: pipeline description block */
+.project-pipeline-block {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+}
+.project-pipeline-block::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+.pipeline-block-header {
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 20px;
+  opacity: .8;
+}
+.pipeline-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.pipeline-meta-key {
+  font-size: 9px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: rgba(230,240,255,.3);
+}
+.pipeline-meta-val {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  font-weight: 300;
+}
+.pipeline-meta-val code {
+  background: rgba(111,168,255,.1);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+.pipeline-desc {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pipeline-step {
+  display: flex;
+  gap: 12px;
+}
+.pipeline-step-num {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: var(--accent);
+  opacity: .5;
+  flex-shrink: 0;
+  font-size: 12px;
+  padding-top: 2px;
+}
+
+/* Right: before/after slider + carousel */
+.project-visuals {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Before/after image comparison slider */
+.compare-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 700px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.compare-label-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.compare-label {
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Compare images wrapper - shows two images side by side with a draggable divider */
+.compare-img {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.compare-img-after {
+  z-index: 2;
+}
+/* The before-side: a clipping wrapper that's resized by JS */
+.compare-before-wrap {
+  position: absolute;
+  top: 0; left: 0;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 4;
+}
+/* The img inside the wrapper must match the full compare-wrap width, not the wrapper width.
+   JS sets img width as a percentage so it always matches the full container. */
+.compare-before-wrap img {
+  position: absolute;
+  top: 0; left: 0;
+  width: 200%; /* initial: wrapper is 50%, so 200% of wrapper = 100% of container */
+  height: 100%;
+  object-fit: contain;
+}
+.compare-divider {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: white;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+}
+.compare-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: white;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,.4);
+  pointer-events: none;
+}
+.compare-handle svg { flex-shrink: 0; }
+
+/* Placeholder for the compare images */
+.compare-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.compare-placeholder-before {
+  background: linear-gradient(135deg, rgba(40,60,100,.6) 0%, rgba(20,40,80,.8) 100%);
+  clip-path: inset(0 50% 0 0);
+}
+.compare-placeholder-after {
+  background: linear-gradient(135deg, rgba(20,30,50,.9) 0%, rgba(10,20,40,.95) 100%);
+}
+.compare-placeholder-text {
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(230,240,255,.3);
+  position: absolute;
+  bottom: 16px;
+}
+.compare-placeholder-text.left { left: 16px; }
+.compare-placeholder-text.right { right: 16px; }
+
+/* Carousel */
+.carousel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.carousel-header {
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(230,240,255,.3);
+}
+.carousel-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.carousel-item {
+  position: relative;
+  aspect-ratio: 3/4;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: none;
+  transition: border-color .3s;
+  background: var(--bg3);
+  min-height: 120px;
+}
+.carousel-item.active { border-color: var(--accent); }
+.carousel-item:hover { border-color: rgba(111,168,255,.4); }
+.carousel-item img {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .5s cubic-bezier(.77,0,.18,1);
+}
+.carousel-item:hover img { transform: scale(1.05); }
+.carousel-thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12px;
+  background: linear-gradient(160deg, #0a1020 0%, #1a2040 100%);
+}
+.carousel-thumb-label {
+  font-size: 9px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(230,240,255,.3);
+  text-align: center;
+}
+
+/* ── GALLERY (replaces portfolio) ── */
+.gallery-section { background: var(--bg2); }
+
+.gallery-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.gallery-main {
+  position: relative;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  max-height: 85vh;
+}
+.gallery-main img {
+  width: 100%;
+  height: auto;
+  max-height: 85vh;
+  object-fit: contain;
+  display: block;
+}
+.gallery-main-placeholder {
+  width: 100%; height: 100%;
+  background: linear-gradient(160deg, var(--bg3) 0%, var(--bg2) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-counter {
+  position: absolute;
+  top: 16px; right: 16px;
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: rgba(230,240,255,.4);
+  background: rgba(0,0,0,.45);
+  padding: 4px 10px;
+}
+.gallery-main-caption {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 20px 20px 16px;
+  background: linear-gradient(to top, rgba(10,15,24,.9), transparent);
+  font-size: 13px;
+  color: var(--muted);
+}
+.gallery-thumbs {
+  display: grid;
+  grid-auto-rows: max-content;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  height: 85vh;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(111,168,255,.2) transparent;
+}
+.gallery-thumb {
+  position: relative;
+  display:block;
+  min-height:160px;
+  aspect-ratio: 3/4;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: none;
+  transition: border-color .3s, opacity .3s;
+}
+.gallery-thumb.active { border-color: var(--accent); }
+.gallery-thumb:not(.active) { opacity: .6; }
+.gallery-thumb:hover { opacity: 1; border-color: rgba(111,168,255,.4); }
+.gallery-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .4s;
+  z-index: 2;
+}
+.gallery-thumb:hover img { transform: scale(1.06); }
+
+/* placeholder thumbnail */
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+}
+.gallery-thumb-num {
+  position: absolute;
+  bottom: 6px; right: 8px;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: rgba(230,240,255,.3);
+}
+.gallery-status {
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  position: absolute;
+  top: 6px; left: 6px;
+}
+.gallery-status.done {
+  background: rgba(111,168,255,.15);
+  color: var(--accent);
+}
+.gallery-status.raw {
+  background: rgba(230,240,255,.06);
+  color: rgba(230,240,255,.3);
+}
+
+/* ── PORTFOLIO (kept for reference, replaced by gallery above) ── */
+.portfolio-section { background: var(--bg2); display:none; }
+
+/* ── CONTACT ── */
+.contact-section { background: var(--bg); }
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 80px;
+  align-items: start;
+}
+.contact-left-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: clamp(32px, 4vw, 56px);
+  line-height: 1.15;
+  margin-bottom: 28px;
+}
+.contact-left-title em {
+  display: block;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+.contact-desc {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--muted);
+  margin-bottom: 36px;
+}
+.contact-links { display: flex; flex-direction: column; gap: 14px; }
+.contact-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  color: var(--text);
+  text-decoration: none;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  transition: border-color .3s, background .3s;
+}
+.contact-link:hover { border-color: rgba(192,132,168,.4); background: rgba(192,132,168,.05); }
+.contact-link svg { flex-shrink:0; opacity:.45; }
+
+.terms-box {
+  border: 1px solid var(--border);
+  padding: 0;
+}
+.terms-header {
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.35);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.terms-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  gap: 24px;
+}
+.terms-row:last-child { border-bottom: none; }
+.terms-key {
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.3);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.terms-val {
+  font-size: 14px;
+  color: var(--text);
+  text-align: right;
+  line-height: 1.5;
+}
+
+/* ── FOOTER ── */
+footer {
+  padding: 28px 64px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-logo {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--text);
+}
+.footer-right {
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(232,228,240,.25);
+}
+
+/* ── SCROLL REVEAL ── */
+.reveal { opacity:0; transform:translateY(28px); transition:opacity .85s ease, transform .85s ease; }
+.reveal.on { opacity:1; transform:translateY(0); }
+.d1{transition-delay:.1s} .d2{transition-delay:.2s} .d3{transition-delay:.3s}
+.d4{transition-delay:.4s} .d5{transition-delay:.5s}
+
+/* ── ANIM HELPERS ── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(28px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px) {
+  .hero { padding: 0 28px; }
+  .section { padding: 72px 28px; }
+  .stats-grid { grid-template-columns: repeat(2,1fr); }
+  .pipeline-grid { grid-template-columns: 1fr; }
+  .pipeline-card:nth-child(2n) { border-right: 1px solid var(--border); }
+  .pipeline-card:nth-child(3) { border-bottom: 1px solid var(--border); }
+  .project-layout { grid-template-columns: 1fr; }
+  .gallery-layout { grid-template-columns: 1fr; }
+  .gallery-thumbs { grid-template-columns: repeat(4,1fr); max-height: none; }
+  .contact-grid { grid-template-columns: 1fr; }
+  .hero-sphere { display:none; }
+  footer { padding: 24px 28px; flex-direction:column; gap:12px; text-align:center; }
+  .exp-item { grid-template-columns:1fr; gap:16px; }
+  .hero-meta { left:28px; right:28px; }
+}
+@media(max-width:560px){
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .gallery-thumbs { grid-template-columns: repeat(3,1fr); }
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<div id="cur"></div>
+<div id="cur-ring"></div>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <!-- Animated bg -->
+  <div class="hero-orb orb1"></div>
+  <div class="hero-orb orb2"></div>
+  <div class="hero-shapes">
+    <div class="shape"></div><div class="shape"></div><div class="shape"></div>
+    <div class="shape"></div><div class="shape"></div><div class="shape"></div>
+    <div class="shape"></div><div class="shape"></div>
+  </div>
+  <div class="hero-sphere"><img src="images/theme.jpg" alt="theme"></div>
+
+  <!-- Top meta -->
+  <div class="hero-meta">
+    <span>PORTFOLIO · 2026<br>— VISUAL NOVEL · CHARACTER ART · AI-ASSISTED PIPELINE</span>
+    <span class="hero-meta-right">2D ARTIST · AI PIPELINE</span>
+  </div>
+
+  <!-- Main content -->
+  <div class="hero-content">
+    <h1 class="hero-name">dohlik</h1>
+    <p class="hero-desc">
+      2D-художник с опытом в игровых проектах. Создаю персонажей,
+      сцены и концепты — вручную и с помощью AI-пайплайна на базе
+      Stable Diffusion. Моя страсть — женская анатомия и
+      многообразие художественных стилей.
+    </p>
+    <div class="hero-tags">
+      <span class="tag">Stable Diffusion</span>
+      <span class="tag">Lora / ControlNet</span>
+      <span class="tag">Photoshop + Firefly</span>
+      <span class="tag">Персонажи</span>
+      <span class="tag">Концепт-арт</span>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <div class="scroll-line"></div>
+    SCROLL
+  </div>
+</section>
+
+<!-- ═══ EXPERIENCE ═══ -->
+<section class="section exp-section" id="experience">
+  <h2 class="section-title reveal" style="margin-bottom:48px">Опыт работы</h2>
+
+  <div class="stats-grid reveal d1">
+    <div class="stat-box">
+      <span class="stat-num" data-target="5">0</span>
+      <span class="stat-lbl">лет в 2D-арте</span>
+    </div>
+    <div class="stat-box">
+      <span class="stat-num" data-target="8">0</span>
+      <span class="stat-lbl">инструментов в стеке</span>
+    </div>
+    <div class="stat-box">
+      <span class="stat-num" data-target="15">0</span>
+      <span class="stat-lbl">стилей освоено</span>
+    </div>
+    <div class="stat-box">
+      <span class="stat-num" style="font-size:36px">✓</span>
+      <span class="stat-lbl">готовность к adult</span>
+    </div>
+  </div>
+
+  <div class="exp-item reveal d2">
+    <div>
+      <div class="exp-year">2020 — н.в.</div>
+      <div class="exp-role">Личные проекты &amp; Фриланс</div>
+    </div>
+    <div>
+      <div class="exp-title">Freelance 2D Artist · AI-Pipeline Specialist</div>
+      <ul class="exp-list">
+        <li>Настроила локальный SD-пайплайн (webui-reForge): подбор базовых моделей, обучение LoRA под стиль заказчика — генерация в разы быстрее ручной отрисовки.</li>
+        <li>ControlNet + img2img для сохранения пропорций и поз между сценами — анатомические правки сведены к минимуму.</li>
+        <li>Постобработка в Photoshop + Firefly: устранение артефактов, коррекция рук и лиц, финальный колор-грейдинг до релизного качества.</li>
+        <li>Дополнительное использование сторонних нейросетей для добработки поз и вариативности (Grok, Leonardo, Gemini)</li>
+        <li>Организация слоёв в проектах, корректное наименование групп, экспорт в требуемые форматы.</li>
+        <li>Разработка и нарезка для покадровой анимации.</li>
+        <li>Дизайн логотипов в Adobe Illustrator для фриланс-клиентов.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PIPELINE ═══ -->
+<section class="section pipeline-section" id="pipeline">
+  <div class="section-label reveal">Workflow</div>
+  <h2 class="section-title reveal d1">Пайплайн работы</h2>
+
+  <div class="pipeline-grid">
+    <div class="pipeline-card reveal d1">
+      <div class="card-num">01</div>
+      <div class="card-title">Генерация &amp; Промптинг</div>
+      <div class="card-tools">Stable Diffusion webui-reForge</div>
+      <div class="card-desc">Подбираю базовые модели и обученные LoRA под нужный стиль проекта. Настройка параметров CFG, sampler, seed — для предсказуемого результата каждый раз.</div>
+    </div>
+    <div class="pipeline-card reveal d2">
+      <div class="card-num">02</div>
+      <div class="card-title">Контроль поз &amp; пропорций</div>
+      <div class="card-tools">ControlNet · img2img</div>
+      <div class="card-desc">Использую ControlNet (OpenPose, Depth, Canny) и img2img для точного сохранения анатомии и поз персонажей между сценами. Сокращает правки до минимума.</div>
+    </div>
+    <div class="pipeline-card reveal d3">
+      <div class="card-num">03</div>
+      <div class="card-title">Постобработка &amp; Финализация</div>
+      <div class="card-tools">Photoshop · Firefly</div>
+      <div class="card-desc">Устраняю артефакты, корректирую руки и черты лица, провожу финальный колор-грейдинг. Каждый арт доводится до качества релиза.</div>
+    </div>
+    <div class="pipeline-card reveal d4">
+      <div class="card-num">04</div>
+      <div class="card-title">Экспорт &amp; Нарезка</div>
+      <div class="card-tools">Photoshop · Illustrator</div>
+      <div class="card-desc">Организую слои, именую группы, экспортирую в форматы PNG/WebP с нужными размерами. Подготовка к интеграции в движок (Ren'Py, Unity и др.).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SPECIAL PROJECT ═══ -->
+<section class="section project-section" id="project">
+  <div class="section-label reveal">Special Project</div>
+  <h2 class="section-title reveal d1">Проект для <em>TopHouse</em></h2>
+
+  <div class="project-layout">
+
+    <!-- LEFT: pipeline description -->
+    <div class="project-pipeline-block reveal d1">
+      <div class="pipeline-block-header">— SD Pipeline · Character</div>
+
+      <div class="pipeline-meta-row">
+        <span class="pipeline-meta-key">Чекпоинт</span>
+        <span class="pipeline-meta-val"><code>FurryToonMix XL-illustrious-V2</code></span>
+      </div>
+
+      <div class="pipeline-meta-row">
+        <span class="pipeline-meta-key">Детали персонажа</span>
+        <span class="pipeline-meta-val">
+1 девушка, соло, каштановые волосы, короткие волосы, зеленые глаза, красивая талия, тонкая талия, красивые бедра, красивое тело, динамичная поза, стоит в полный рост, капюшон, 1 корзина яблок, поворачивается, чтобы посмотреть на зрителя, лес, девушка в лесу, смущение, красный капюшон, красный комбинезон, подол, белый подол, путешественница, молодая девушка, привлекательная, сексуальная, смотрит на зрителя, красная толстовка, коричневая обувь        </span>
+      </div>
+
+      <div class="pipeline-meta-row" style="border:none;margin-bottom:0;padding-bottom:0">
+        <span class="pipeline-meta-key">Охват</span>
+        <span class="pipeline-meta-val">26 изображений · 1 до релизного качества</span>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin:20px 0"></div>
+
+      <div class="pipeline-desc">
+        <div class="pipeline-step">
+          <span class="pipeline-step-num">01.</span>
+          <span>Генерация в SD webui-reForge: подбор чекпоинта и LoRA под стиль проекта. Настройка CFG, sampler, seed — для стабильного характера персонажа в разных сценах.</span>
+        </div>
+        <div class="pipeline-step">
+          <span class="pipeline-step-num">02.</span>
+          <span>ControlNet OpenPose + img2img — использование различных поз между 26 вариантами. Дополнительно использовала Grok для быстрых генераций поз.</span>
+        </div>
+        <div class="pipeline-step">
+          <span class="pipeline-step-num">03.</span>
+          <span>Постобработка одного варианта в Photoshop: правка рук и лица, финальный колор-грейдинг, доводка до релизного качества VN-арта.</span>
+        </div>
+        <div class="pipeline-step">
+          <span class="pipeline-step-num">04.</span>
+          <span>Остальные 25 изображения — черновики: структурированы и готовы к дальнейшей постобработке по задаче.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: before/after + carousel -->
+    <div class="project-visuals reveal d2">
+
+      <!-- Before/After slider -->
+      <div>
+        <div class="compare-label-row">
+          <span class="compare-label">SD-генерация</span>
+          <span class="compare-label">Финал · Photoshop</span>
+        </div>
+        <div class="compare-wrap" id="compareWrap">
+          <!-- AFTER: full image (bottom layer) -->
+          <div class="compare-placeholder compare-placeholder-after" id="afterPlaceholder" style="z-index:1">
+            <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="opacity:.18">
+              <ellipse cx="60" cy="44" rx="22" ry="26" fill="#6fa8ff"/>
+              <path d="M28 110 Q60 80 92 110" fill="#6fa8ff"/>
+            </svg>
+            <span class="compare-placeholder-text right">Финал · Photoshop</span>
+          </div>
+          <img class="compare-img compare-img-after" id="afterImg" src="images/after.png" alt="Финал Photoshop"
+               onload="document.getElementById('afterPlaceholder').style.display='none'"
+               onerror="this.style.display='none'">
+
+          <!-- BEFORE: in a clipped wrapper so the image itself is full-size (correct contain) -->
+          <div class="compare-placeholder compare-placeholder-before" id="beforePlaceholder" style="z-index:3">
+            <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="opacity:.22">
+              <ellipse cx="60" cy="44" rx="22" ry="26" fill="#4a7ab5"/>
+              <path d="M28 110 Q60 80 92 110" fill="#4a7ab5"/>
+            </svg>
+            <span class="compare-placeholder-text left">SD-генерация</span>
+          </div>
+          <div class="compare-before-wrap" id="beforeWrap">
+            <img class="compare-img" id="beforeImg" src="images/before.png" alt="SD-генерация"
+                 onload="document.getElementById('beforePlaceholder').style.display='none'"
+                 onerror="this.parentElement.style.display='none'">
+          </div>
+
+          <div class="compare-divider" id="compareDivider" style="z-index:5"></div>
+          <div class="compare-handle" id="compareHandle" style="z-index:6">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 8l-3-3v6l3-3zm6 0l3-3v6l-3-3z" fill="#333"/>
+              <line x1="8" y1="2" x2="8" y2="14" stroke="#333" stroke-width="1.5"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GALLERY ═══ -->
+<section class="section gallery-section" id="gallery">
+  <div class="section-label reveal">Gallery</div>
+  <h2 class="section-title reveal d1" style="margin-bottom:12px">Все <em>26 изображений</em></h2>
+  <p class="portfolio-note reveal d2" style="display:block;font-size:13px;color:var(--muted);margin-top:-60x;margin-bottom:48px;font-style:italic">
+    Полный пайплайн персонажа · ✦ — доработано в Photoshop · остальные — черновые SD-генерации
+  </p>
+
+  <div class="gallery-layout reveal d2">
+
+    <!-- Large preview -->
+    <div class="gallery-main" id="galleryMain">
+      <img id="galleryMainImg" src="" alt="" style="display:none">
+      <div class="gallery-main-placeholder" id="galleryMainPlaceholder">
+        <svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg" style="opacity:.12">
+          <ellipse cx="90" cy="64" rx="34" ry="40" fill="#6fa8ff"/>
+          <path d="M36 160 Q90 115 144 160" fill="#6fa8ff"/>
+        </svg>
+      </div>
+      <div class="gallery-counter" id="galleryCounter">1 / 26</div>
+      <div class="gallery-main-caption" id="galleryCaption">Изображение 01 · SD-генерация</div>
+    </div>
+
+    <!-- Thumbnail grid -->
+    <div class="gallery-thumbs" id="galleryThumbs">
+      <!-- Generated by JS below -->
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══ CONTACT ═══ -->
+<section class="section contact-section" id="contact">
+  <div class="section-label reveal">Contact</div>
+
+  <div class="contact-grid">
+    <div>
+      <div class="contact-left-title reveal d1">
+        Готова к<br><em>сотрудничеству</em>
+      </div>
+      <p class="contact-desc reveal d2">
+        Открыта к долгосрочному сотрудничеству с командами
+        визуальных новелл. Готова работать с adult-контентом,
+        соблюдать NDA и встроиться в существующий
+        пайплайн проекта.
+      </p>
+      <div class="contact-links reveal d3">
+        <a href="https://t.me/dobrava_m" class="contact-link" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 5L2 12.5l7 1M21 5l-2.5 15L9 13.5M21 5L9 13.5m0 0v5l3.5-3"/></svg>
+          Telegram — @dobrava_m
+        </a>
+        <a href="mailto:dobrikkirik@gmail.com" class="contact-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
+          dobrikkirik@gmail.com
+        </a>
+      </div>
+    </div>
+
+    <div class="terms-box reveal d2">
+      <div class="terms-header">Условия работы</div>
+      <div class="terms-row">
+        <span class="terms-key">Формат</span>
+        <span class="terms-val">Удалённо / полная занятость / проект</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-key">Контент</span>
+        <span class="terms-val">SFW + Adult (18+) — комфортно</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-key">Стили</span>
+        <span class="terms-val">Аниме, полуреализм, стилизация</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-key">NDA</span>
+        <span class="terms-val">Готова к подписанию</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-key">Коммуникация</span>
+        <span class="terms-val">Русский, English (A2)</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-key">Тестовое</span>
+        <span class="terms-val">Готова выполнить по согласованию</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+  <div class="footer-logo">dohlik</div>
+  <div class="footer-right">2D Artist · AI Pipeline · Visual Novel · 2026</div>
+</footer>
+
+<script>
+// ── Cursor ──
+const cur = document.getElementById('cur');
+const ring = document.getElementById('cur-ring');
+let mx=0, my=0, rx=0, ry=0;
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cur.style.left = mx+'px';
+  cur.style.top  = my+'px';
+});
+(function tick(){
+  rx += (mx-rx)*.11;
+  ry += (my-ry)*.11;
+  ring.style.left = rx+'px';
+  ring.style.top  = ry+'px';
+  requestAnimationFrame(tick);
+})();
+
+// ── Scroll reveal ──
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); }
+  });
+}, { threshold: 0.08, rootMargin:'0px 0px -32px 0px' });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// ── Stats counter ──
+const statObs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(!e.isIntersecting) return;
+    e.target.querySelectorAll('[data-target]').forEach(el => {
+      const target = +el.dataset.target;
+      const suffix = el.closest('.stat-num')?.nextElementSibling?.textContent.includes('стил') ? '+' : '+';
+      let cur = 0;
+      const step = target / 35;
+      const t = setInterval(() => {
+        cur += step;
+        if(cur >= target){ el.textContent = target + '+'; clearInterval(t); }
+        else el.textContent = Math.floor(cur) + '+';
+      }, 28);
+    });
+    statObs.unobserve(e.target);
+  });
+}, { threshold: 0.4 });
+const sg = document.querySelector('.stats-grid');
+if(sg) statObs.observe(sg);
+
+// ── Before/After Compare Slider ──
+(function(){
+  const wrap = document.getElementById('compareWrap');
+  if(!wrap) return;
+  const beforeWrap = document.getElementById('beforeWrap');
+  const beforePlaceholder = document.getElementById('beforePlaceholder');
+  const divider = document.getElementById('compareDivider');
+  const handle = document.getElementById('compareHandle');
+  let dragging = false;
+
+  function setPos(pct) {
+    pct = Math.max(2, Math.min(98, pct));
+    // Move the clipping wrapper
+    if(beforeWrap) {
+      beforeWrap.style.width = pct + '%';
+      // The image inside must be as wide as the full wrap, not the clipped wrapper
+      const img = beforeWrap.querySelector('img');
+      if(img) img.style.width = (100 / pct * 100) + '%';
+    }
+    // Move before placeholder clip too
+    if(beforePlaceholder) beforePlaceholder.style.clipPath = `inset(0 ${100-pct}% 0 0)`;
+    divider.style.left = pct + '%';
+    handle.style.left = pct + '%';
+  }
+
+  function getPct(e) {
+    const rect = wrap.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    return ((clientX - rect.left) / rect.width) * 100;
+  }
+
+  wrap.addEventListener('mousedown', e => { dragging = true; setPos(getPct(e)); e.preventDefault(); });
+  wrap.addEventListener('touchstart', e => { dragging = true; setPos(getPct(e)); }, {passive:true});
+  document.addEventListener('mousemove', e => { if(dragging) setPos(getPct(e)); });
+  document.addEventListener('touchmove', e => { if(dragging) setPos(getPct(e)); }, {passive:true});
+  document.addEventListener('mouseup', () => dragging = false);
+  document.addEventListener('touchend', () => dragging = false);
+
+  setPos(50);
+})();
+
+// ── Carousel ──
+const comparePairs = [
+  {
+    before: 'images/before.png',
+    after: 'images/after.png'
+  },
+  {
+    before: 'images/before01.png',
+    after: 'images/after01.png'
+  },
+  {
+    before: 'images/before02.png',
+    after: 'images/after02.png'
+  }
+];
+
+selectCarousel(0);
+
+function selectCarousel(idx) {
+
+  document.querySelectorAll('.carousel-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+
+  const beforeImg = document.getElementById('beforeImg');
+  const afterImg = document.getElementById('afterImg');
+
+  beforeImg.src = comparePairs[idx].before;
+  afterImg.src = comparePairs[idx].after;
+}
+
+// автоматический поиск png/jpg/jpeg/webp
+function loadImageWithFallback(imgElement, basePath) {
+    const formats = ['png', 'jpg', 'jpeg', 'webp'];
+
+    let index = 0;
+
+    function tryNext() {
+        if (index >= formats.length) return;
+
+        imgElement.src = `${basePath}.${formats[index]}`;
+
+        imgElement.onerror = () => {
+            index++;
+            tryNext();
+        };
+    }
+
+    tryNext();
+}
+
+
+// ── Gallery ──
+(function(){
+  const thumbsContainer = document.getElementById('galleryThumbs');
+  const mainImg = document.getElementById('galleryMainImg');
+  const mainPlaceholder = document.getElementById('galleryMainPlaceholder');
+  const counter = document.getElementById('galleryCounter');
+  const caption = document.getElementById('galleryCaption');
+  if(!thumbsContainer) return;
+
+  // 26 images: indices 1-26; first 3 are "done"
+  const images = Array.from({length: 26}, (_, i) => ({
+	  idx: i + 1,
+	  file: `images/char_${String(i+1).padStart(2,'0')}.png`,
+	  done: i === 0,
+	  label: `Изображение ${String(i+1).padStart(2,'0')} · ${i === 0 ? '✦ Финальное' : 'SD-черновик'}`
+	}));
+
+  let active = 0;
+
+  // gradient colors for placeholder variety
+  const gradients = [
+    'linear-gradient(160deg,#0a1020 0%,#1a2040 100%)',
+    'linear-gradient(140deg,#0c1018 0%,#182030 100%)',
+    'linear-gradient(160deg,#080c18 0%,#142234 100%)',
+    'linear-gradient(150deg,#10080a 0%,#201424 100%)',
+    'linear-gradient(160deg,#0a1008 0%,#14201a 100%)',
+    'linear-gradient(140deg,#0c0a08 0%,#20180c 100%)',
+  ];
+
+  images.forEach((img, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'gallery-thumb' + (i === 0 ? ' active' : '');
+    thumb.style.cursor = 'none';
+
+    // placeholder (always shown, hidden when image loads)
+    const ph = document.createElement('div');
+    ph.className = 'thumb-placeholder';
+    ph.style.cssText = `background:${gradients[i % gradients.length]};position:absolute;inset:0;z-index:1;`;
+
+    // real image
+    const el = document.createElement('img');
+    el.alt = img.label;
+    el.onload = () => { ph.style.display = 'none'; };
+    el.onerror = () => { el.style.display = 'none'; };
+    loadImageWithFallback(
+    el,
+    `images/char_${String(i+1).padStart(2,'0')}`
+	); // set src after handlers
+
+    const statusEl = document.createElement('span');
+    statusEl.className = 'gallery-status ' + (img.done ? 'done' : 'raw');
+    statusEl.textContent = img.done ? '✦' : '—';
+    statusEl.style.zIndex = '3';
+
+    const numEl = document.createElement('span');
+    numEl.className = 'gallery-thumb-num';
+    numEl.textContent = String(i+1).padStart(2,'0');
+    numEl.style.zIndex = '3';
+
+    thumb.appendChild(ph);
+    thumb.appendChild(el);
+    thumb.appendChild(statusEl);
+    thumb.appendChild(numEl);
+
+    thumb.addEventListener('click', () => selectThumb(i));
+    thumbsContainer.appendChild(thumb);
+  });
+
+  function selectThumb(i) {
+    active = i;
+    const img = images[i];
+    document.querySelectorAll('.gallery-thumb').forEach((el, j) => {
+      el.classList.toggle('active', j === i);
+      if(j === i) el.scrollIntoView({block:'nearest', behavior:'smooth'});
+    });
+
+    // reset
+    mainImg.style.display = 'none';
+    mainPlaceholder.style.display = 'flex';
+    counter.textContent = `${i+1} / 26`;
+    caption.textContent = img.label;
+
+    // load image
+    const formats = ['png', 'jpg', 'jpeg', 'webp'];
+	let formatIndex = 0;
+
+	function tryLoadMain() {
+
+		if (formatIndex >= formats.length) {
+			mainImg.style.display = 'none';
+			mainPlaceholder.style.display = 'flex';
+			return;
+		}
+
+		const src =
+			`images/char_${String(i + 1).padStart(2, '0')}.${formats[formatIndex]}`;
+
+		const newImg = new Image();
+
+		newImg.onload = () => {
+			mainImg.src = src;
+			mainImg.style.display = 'block';
+			mainPlaceholder.style.display = 'none';
+		};
+
+		newImg.onerror = () => {
+			formatIndex++;
+			tryLoadMain();
+		};
+
+		newImg.src = src;
+	}
+
+	tryLoadMain();
+  }
+
+  selectThumb(0);
+})();
+</script>
+</body>
+</html>
