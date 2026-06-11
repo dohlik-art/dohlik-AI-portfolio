@@ -1442,7 +1442,7 @@ function loadImageWithFallback(imgElement, basePath) {
     const img = images[i];
     document.querySelectorAll('.gallery-thumb').forEach((el, j) => {
       el.classList.toggle('active', j === i);
-      if(j === i) el.scrollIntoView({block:'nearest', behavior:'smooth'});
+      if(j === i && active !== 0) el.scrollIntoView({block:'nearest', behavior:'smooth'});
     });
 
     // reset
